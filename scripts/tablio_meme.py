@@ -413,8 +413,8 @@ def draw_tabby(size, mood='shock', bg_top=(70, 86, 110), bg_bot=(26, 30, 40)):
 
 def shot_reaction(p, seed=0):
     mood = p.get('mood', 'shock')
-    cols = {'shock': ((96, 64, 160), (30, 18, 52)), 'squint': ((150, 110, 60), (48, 34, 18)),
-            'cry': ((60, 100, 160), (16, 28, 52)), 'stare': ((90, 96, 104), (28, 30, 34))}.get(mood, ((90, 96, 104), (28, 30, 34)))
+    flat = {'shock': (74, 50, 120), 'squint': (112, 82, 46), 'cry': (44, 74, 120), 'stare': (66, 70, 76)}.get(mood, (66, 70, 76))
+    cols = (flat, flat)   # flat colour: no gradients
     im = draw_tabby(BW, mood, *cols)
     im = im.crop((0, 0, BW, BH)) if im.height >= BH else im.resize((BW, BH))
     if mood == 'shock':
@@ -425,7 +425,104 @@ def shot_reaction(p, seed=0):
             d.line([(cx + math.cos(a) * r0, cy + math.sin(a) * r0), (cx + math.cos(a) * r1, cy + math.sin(a) * r1)], fill=(255, 255, 255), width=rng.randint(2, 6))
     if p.get('label'):
         ImageDraw.Draw(im).text((BW * 0.72, BH * 0.30), p['label'], font=mont(170, 900), fill=(255, 255, 255), stroke_width=10, stroke_fill=(0, 0, 0), anchor='mm')
-    return noise(vignette(im, 0.45), 6, seed)
+    return noise(im, 6, seed)
+
+FLAT = (14, 14, 13)   # flat neutral near-black (no gradient, no tint)
+CORAL = (255, 98, 82)
+
+def data_card(p, cw=960):
+    """A real-looking data sheet: title, source line, header row, rows; optional highlighted rows.
+    p: title, sub, cols [..], rows [[..]], hl {"row index": "coral"|"emerald"} (0 = first data row)."""
+    cols, rows = p.get('cols', []), p.get('rows', [])
+    hl = {int(k): v for k, v in p.get('hl', {}).items()}
+    rh, top = 96, 250
+    ch = top + rh * (len(rows) + 1) + 70
+    im = Image.new('RGB', (cw, ch), (255, 255, 255)); d = ImageDraw.Draw(im)
+    title = p.get('title', '')
+    fs = 54
+    while fs > 30 and inter(fs, 'Bold').getlength(title) > cw - 90: fs -= 2
+    d.text((46, 56), title, font=inter(fs, 'Bold'), fill=(18, 18, 18))
+    if p.get('sub'): d.text((46, 56 + fs + 22), p['sub'], font=inter(30, 'Medium'), fill=(120, 120, 124))
+    ncol = max(1, len(cols))
+    xs = p.get('xs') or ([46, 150] + [cw - 46] * (ncol - 2) if ncol > 2 else [46, cw - 46])
+    aligns = p.get('align') or (['l', 'l'] + ['r'] * (ncol - 2) if ncol > 2 else ['l', 'r'])
+    y = top
+    d.rectangle([30, y, cw - 30, y + rh], fill=(34, 120, 90))
+    for c, h in enumerate(cols):
+        f = inter(34, 'Bold')
+        d.text((xs[c], y + rh / 2), h, font=f, fill=(255, 255, 255), anchor='lm' if aligns[c] == 'l' else 'rm')
+    for r, row in enumerate(rows):
+        y = top + rh * (r + 1)
+        col = hl.get(r)
+        if col: d.rectangle([30, y, cw - 30, y + rh], fill=(255, 226, 222) if col == 'coral' else (209, 250, 229))
+        elif r % 2: d.rectangle([30, y, cw - 30, y + rh], fill=(244, 245, 244))
+        for c, cell in enumerate(row):
+            bold = col is not None or c == 0
+            f = inter(42, 'Bold' if bold else 'Medium')
+            fg = (196, 40, 28) if col == 'coral' else (6, 95, 70) if col == 'emerald' else (24, 24, 24)
+            d.text((xs[c], y + rh / 2), str(cell), font=f, fill=fg, anchor='lm' if aligns[c] == 'l' else 'rm')
+        d.line([30, y + rh, cw - 30, y + rh], fill=(222, 224, 223), width=2)
+    return im
+
+def big_card(p, cw=1010):
+    cols, rows = p.get('cols', []), p.get('rows', [])
+    hl = {int(k): v for k, v in p.get('hl', {}).items()}
+    rh = 140; ch = rh * (len(rows) + 1)
+    im = Image.new('RGB', (cw, ch), (255, 255, 255)); d = ImageDraw.Draw(im)
+    sc = cw / 960
+    xs = [int(v * sc) for v in (p.get('xs') or [46, 150, 914])]
+    aligns = p.get('align') or ['l', 'l', 'r']
+    d.rectangle([0, 0, cw, rh], fill=(34, 120, 90))
+    for c, h in enumerate(cols):
+        d.text((xs[c], rh / 2), h, font=inter(46, 'Bold'), fill=(255, 255, 255), anchor='lm' if aligns[c] == 'l' else 'rm')
+    for r, row in enumerate(rows):
+        y = rh * (r + 1); col = hl.get(r)
+        if col: d.rectangle([0, y, cw, y + rh], fill=(255, 226, 222) if col == 'coral' else (209, 250, 229))
+        elif r % 2: d.rectangle([0, y, cw, y + rh], fill=(244, 245, 244))
+        for c, cell in enumerate(row):
+            fg = (196, 40, 28) if col == 'coral' else (6, 95, 70) if col == 'emerald' else (24, 24, 24)
+            d.text((xs[c], y + rh / 2), str(cell), font=inter(64 if col else 58, 'Bold' if (col or c == 0) else 'Medium'), fill=fg, anchor='lm' if aligns[c] == 'l' else 'rm')
+        d.line([0, y + rh, cw, y + rh], fill=(222, 224, 223), width=2)
+    return im
+
+def shot_data(p, seed=0):
+    """Data sheet on a flat neutral background. p.focus = data row index to zoom into (optional)."""
+    im = Image.new('RGB', (BW, BH), FLAT)
+    card = data_card(p)
+    mask = Image.new('L', card.size, 0); ImageDraw.Draw(mask).rounded_rectangle([0, 0, card.width, card.height], 34, fill=255)
+    if 'focus' in p:
+        # close-up: a 5-row window around the focus row, bigger type, always full width
+        f = int(p['focus']); rows = p.get('rows', [])
+        a = max(0, min(f - 2, len(rows) - 5)); b = min(len(rows), a + 5)
+        q = dict(p); q['rows'] = rows[a:b]; q['hl'] = {str(int(k) - a): v for k, v in p.get('hl', {}).items() if a <= int(k) < b}
+        q['title'] = ''; q['sub'] = ''
+        card = big_card(q)
+        mask = Image.new('L', card.size, 0); ImageDraw.Draw(mask).rounded_rectangle([0, 0, card.width, card.height], 34, fill=255)
+        x = OX + (W - card.width) // 2
+        y = OY + int(H * 0.58 - card.height / 2)
+    else:
+        x = OX + (W - card.width) // 2
+        y = OY + int(H * 0.60 - card.height / 2)
+    im.paste(card, (x, y), mask)
+    return im
+
+def shot_text(p, seed=0):
+    """One big statement on a flat neutral background (p.text, optional p.sub, p.accent word)."""
+    im = Image.new('RGB', (BW, BH), FLAT); d = ImageDraw.Draw(im)
+    font = mont(p.get('size', 104), 800)
+    lines = wrap(p.get('text', ''), font, 100, 900)
+    asc, desc = font.getmetrics(); lh = int((asc + desc) * 1.08)
+    y = OY + H * 0.56 - lh * len(lines) / 2
+    acc = p.get('accent')
+    for ln in lines:
+        x = BW / 2 - font.getlength(ln) / 2
+        for wd in ln.split(' '):
+            colr = (200, 240, 60) if acc and wd.strip('.,!?') == acc else (245, 245, 245)
+            d.text((x, y), wd, font=font, fill=colr); x += font.getlength(wd + ' ')
+        y += lh
+    if p.get('sub'):
+        d.text((BW / 2, y + 50), p['sub'], font=inter(44, 'Medium'), fill=(160, 160, 165), anchor='mm')
+    return im
 
 def wordmark(img, cx, cy, cap, color=(255, 255, 255)):
     """TABLIO + round emerald dot on the baseline (~0.28x cap height)."""
@@ -452,7 +549,6 @@ def end_card(kw, t):
     tab = _end['tab']
     rise = ease((t - 0.3) / 0.45)
     if rise > 0: im.paste(tab, (W // 2 - tab.width // 2, int(H - 170 - tab.height * rise)))
-    im.paste((16, 120, 90), (0, 0), _end['glow'])
     a1, a2, a3 = ease(t / 0.25), ease((t - 0.15) / 0.3), ease((t - 0.45) / 0.3)
     lay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     ImageDraw.Draw(lay).text((W / 2, 690), 'Just use', font=mont(86, 700), fill=(240, 240, 240, int(255 * a1)), anchor='mm')
@@ -474,7 +570,8 @@ def end_card(kw, t):
     return im
 
 BUILDERS = {'chat': shot_chat, 'monitor': shot_monitor, 'slide': shot_slide, 'paper': shot_paper,
-            'column_a': shot_column_a, 'locked': shot_locked, 'retype': shot_retype, 'reaction': shot_reaction}
+            'column_a': shot_column_a, 'locked': shot_locked, 'retype': shot_retype, 'reaction': shot_reaction,
+            'data': shot_data, 'text': shot_text}
 
 # ---------------------------------------------------------------- render
 def frames(spec, stills=None):
