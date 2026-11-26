@@ -517,7 +517,7 @@ def shot_text(p, seed=0):
     for ln in lines:
         x = BW / 2 - font.getlength(ln) / 2
         for wd in ln.split(' '):
-            colr = (200, 240, 60) if acc and wd.strip('.,!?') == acc else (245, 245, 245)
+            colr = (16, 185, 129) if acc and wd.strip('.,!?') == acc else (245, 245, 245)
             d.text((x, y), wd, font=font, fill=colr); x += font.getlength(wd + ' ')
         y += lh
     if p.get('sub'):
